@@ -285,6 +285,8 @@ button:disabled{opacity:.45;cursor:default}
 .link{border:0;background:transparent;color:var(--muted);text-decoration:underline;padding:4px 0;font-size:.86rem}
 .nv-msg{font-size:.86rem;min-height:1.2em;color:var(--muted)}
 .nv-msg.err{color:var(--danger)}
+.nv-senha{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
+.nv-senha.destaque{background:var(--brass-soft);border-radius:var(--r);padding:14px;border-top:0}
 .nv-info{display:grid;gap:6px;font-size:.92rem;background:var(--surface-2);border-radius:var(--r);padding:14px 16px}
 .box textarea{width:100%;min-height:110px;border:1px solid var(--line-strong);border-radius:var(--r-sm);padding:10px;font-family:var(--f-mono);font-size:.8rem;background:var(--surface)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:.88rem;z-index:90;box-shadow:var(--shadow);display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
@@ -413,6 +415,12 @@ button:disabled{opacity:.45;cursor:default}
       <div class="nv-info"><span>Conta: <b id="nvQuem"></b></span><span>Última sincronização: <b id="nvQuando"></b></span><span id="nvPend"></span></div>
       <div class="nv-msg" id="nvMsg2"></div>
       <div class="row"><button class="btn pri" id="nvAgora">Sincronizar agora</button><button class="btn danger" id="nvSair">Sair desta conta</button></div>
+      <form id="nvTrocar" class="stack nv-senha">
+        <p class="lbl" id="nvTrocarTit">Trocar senha</p>
+        <input class="inp" id="nvNova" type="password" placeholder="Nova senha (mínimo 6 caracteres)" autocomplete="new-password">
+        <div class="row"><button class="btn" type="submit">Salvar nova senha</button></div>
+        <div class="nv-msg" id="nvMsg3"></div>
+      </form>
     </div>
     <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" id="nvFechar">Fechar</button></div>
   </div>
@@ -930,7 +938,9 @@ function iniciarNuvem(){
   if(!cfgOk()){setEstado("semcfg");return}
   try{sb=window.supabase.createClient(cfg().supabaseUrl,cfg().supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"pulpito.auth"}})}catch(e){setEstado("semcfg");return}
   sb.auth.getSession().then(function(r){conta=r.data&&r.data.session?r.data.session.user:null;atualizaEstado();if(conta)sincronizar()}).catch(function(){atualizaEstado()});
-  sb.auth.onAuthStateChange(function(ev,ses){var antes=conta&&conta.id;conta=ses?ses.user:null;atualizaEstado();if(conta&&conta.id!==antes)sincronizar()});
+  sb.auth.onAuthStateChange(function(ev,ses){var antes=conta&&conta.id;conta=ses?ses.user:null;atualizaEstado();
+    if(ev==="PASSWORD_RECOVERY")setTimeout(modoNovaSenha,50);
+    if(conta&&conta.id!==antes)sincronizar()});
 }
 function atualizaEstado(){if(!sb)return setEstado("semcfg");if(!conta)return setEstado("sair");if(!navigator.onLine)return setEstado("offline");setEstado(nPend()?"offline":"ok")}
 function agendarSync(){if(!conta)return;clearTimeout(timerSync);if(!navigator.onLine){setEstado("offline");return}timerSync=setTimeout(sincronizar,1500)}
@@ -987,6 +997,7 @@ function traduz(msg){msg=String(msg||"");
   if(/Email not confirmed/i.test(msg))return "Confirme o seu e-mail pelo link que enviamos e depois toque em Entrar.";
   if(/already registered|already exists/i.test(msg))return "Esse e-mail já tem conta. Toque em Entrar.";
   if(/Password should be|at least 6/i.test(msg))return "A senha precisa ter pelo menos 6 caracteres.";
+  if(/different from the old|same as the old/i.test(msg))return "A nova senha precisa ser diferente da atual.";
   if(/rate limit|too many/i.test(msg))return "Muitas tentativas. Aguarde um minuto e tente de novo.";
   if(/Failed to fetch|NetworkError|network/i.test(msg))return "Sem conexão com a internet.";
   if(/relation .* does not exist|pulpito_itens|schema cache/i.test(msg))return "A tabela do Supabase ainda não foi criada (veja o LEIA-ME, passo 1).";
@@ -1012,8 +1023,18 @@ $("#nvEsqueci").onclick=function(){
   var em=$("#nvEmail").value.trim();if(!em){msgLogin("Digite o seu e-mail acima e toque de novo em Esqueci a senha.",true);$("#nvEmail").focus();return}
   msgLogin("Enviando…");
   sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname}).then(function(r){if(r.error){msgLogin(traduz(r.error.message),true);return}
-    msgLogin("Enviamos um link para "+em+". Se a senha for trocada pelo Hinário, ela vale aqui também.")})
+    msgLogin("Enviamos um link para "+em+". Abra o e-mail neste aparelho, toque no link e crie a nova senha. Ela vale aqui e no Hinário.")})
   .catch(function(err){msgLogin(traduz(err&&err.message),true)})};
+function modoNovaSenha(){renderConta();$("#ovNv").hidden=false;$("#nvTrocar").classList.add("destaque");
+  $("#nvTrocarTit").textContent="Crie a sua nova senha";$("#nvMsg3").textContent="";setTimeout(function(){$("#nvNova").focus()},50)}
+$("#nvTrocar").addEventListener("submit",function(e){e.preventDefault();
+  var se=$("#nvNova").value,m=$("#nvMsg3");if(se.length<6){m.className="nv-msg err";m.textContent="A senha precisa ter pelo menos 6 caracteres.";return}
+  m.className="nv-msg";m.textContent="Salvando…";
+  sb.auth.updateUser({password:se}).then(function(r){
+    if(r.error){m.className="nv-msg err";m.textContent=traduz(r.error.message);return}
+    $("#nvNova").value="";m.className="nv-msg";m.textContent="Senha alterada. Ela vale aqui e no Hinário.";
+    $("#nvTrocar").classList.remove("destaque");$("#nvTrocarTit").textContent="Trocar senha"})
+  .catch(function(err){m.className="nv-msg err";m.textContent=traduz(err&&err.message)})});
 $("#nvAgora").onclick=function(){sincronizar().then(renderConta)};
 $("#nvSair").onclick=function(){var b=this;
   if(!b.classList.contains("arm")){b.classList.add("arm");b.textContent="Toque de novo para sair";setTimeout(function(){b.classList.remove("arm");b.textContent="Sair desta conta"},4000);return}

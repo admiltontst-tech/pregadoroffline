@@ -1,7 +1,7 @@
 /* Púlpito — service worker: guarda o app e a Bíblia no aparelho para funcionar sem internet.
    Ao publicar uma nova versão do app, aumente VERSAO. A Bíblia tem cache próprio (BIBLIA)
    e só é baixada de novo se esse número mudar. */
-const VERSAO = "pulpito-v1";
+const VERSAO = "pulpito-v2";
 const BIBLIA = "pulpito-biblia-1";
 const ARQUIVOS = [
   "./", "index.html", "manifest.webmanifest", "config.js", "vendor/supabase.js",
